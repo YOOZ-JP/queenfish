@@ -43,7 +43,7 @@ function resetTime(iso) {
   const days = ["일", "월", "화", "수", "목", "금", "토"];
   const hh = String(dt.getHours()).padStart(2, "0");
   const mm = String(dt.getMinutes()).padStart(2, "0");
-  return `${days[dt.getDay()]} ${hh}:${mm} 리셋`;
+  return `${days[dt.getDay()]} ${hh}:${mm} 초기화`;
 }
 
 function pctClass(p) {
@@ -87,8 +87,16 @@ function renderUsage() {
   const rows = data.accounts
     .map((acc) => {
       const metrics = metricsFor(acc);
+      const usageStale = acc.error && (acc.error.includes("429") || acc.error.includes("만료"));
       const staleMark = acc.error && metrics.length > 0
-        ? `<span class="metric" title="${esc(acc.error)} (이전 데이터 표시 중)">⏳</span>`
+        ? usageStale
+          ? `<span class="metric" title="${esc(acc.error)} (이전 데이터 표시 중)">⏳</span>`
+          : `<span class="metric" title="${esc(acc.error)}">ⓘ</span>`
+        : "";
+      const resetSrc =
+        metrics.find((m) => m.label === "주간" && m.resets) || metrics.find((m) => m.resets);
+      const resetHtml = resetSrc
+        ? `<span class="metric reset" title="한도 초기화 시각">${esc(resetTime(resetSrc.resets))}</span>`
         : "";
       const inner = acc.error && metrics.length === 0
         ? `<span class="usage-err" title="${esc(acc.error)}">${esc(acc.error)}</span>`
@@ -101,7 +109,7 @@ function renderUsage() {
           ${m.pct.toFixed(0)}%
         </span>`
             )
-            .join("");
+            .join("") + resetHtml;
       const verb = acc.removable ? "삭제" : "숨김";
       const confirming = pendingRemove === acc.id;
       const removeTitle = acc.removable
