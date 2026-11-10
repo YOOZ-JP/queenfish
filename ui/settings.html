@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Queenfish 설정</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    body { -webkit-user-select: text; user-select: text; }
+    .settings {
+      height: 100vh;
+      overflow-y: auto;
+      background: var(--bg);
+      padding: 16px 18px 20px;
+      box-sizing: border-box;
+    }
+    .settings h2 {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      margin: 18px 0 8px;
+    }
+    .settings h2:first-child { margin-top: 0; }
+    .s-card {
+      background: var(--chip-bg);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .s-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+    }
+    .s-row:last-child { border-bottom: none; }
+    .s-main { flex: 1; min-width: 0; }
+    .s-title {
+      font-size: 13px;
+      font-weight: 600;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .s-sub {
+      font-size: 11px;
+      color: var(--muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      margin-top: 1px;
+    }
+    .s-sub.err { color: var(--hot); }
+    .tag {
+      display: inline-block;
+      font-size: 9px;
+      padding: 1px 6px;
+      border-radius: 8px;
+      background: var(--bar-bg);
+      color: var(--muted);
+      vertical-align: 1px;
+      margin-left: 5px;
+    }
+    .s-btn {
+      flex: 0 0 auto;
+      border: none;
+      border-radius: 6px;
+      padding: 5px 10px;
+      font-size: 11px;
+      cursor: pointer;
+      background: var(--bar-bg);
+      color: var(--fg);
+      white-space: nowrap;
+    }
+    .s-btn:hover { background: var(--row-hover); }
+    .s-btn.danger { color: var(--hot); }
+    .s-btn.danger.confirm { background: var(--hot); color: #fff; }
+    .s-btn.primary { background: var(--accent); color: #fff; }
+    .s-actions { margin-top: 8px; display: flex; gap: 8px; align-items: center; }
+    .hint { font-size: 11px; color: var(--muted); margin: 6px 2px; line-height: 1.5; }
+    .s-empty { padding: 12px; font-size: 12px; color: var(--muted); text-align: center; }
+    #status-line { font-size: 11px; color: var(--accent); min-height: 14px; margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <div class="settings">
+    <h2>계정</h2>
+    <div id="accounts" class="s-card"></div>
+    <div class="s-actions">
+      <button id="add" class="s-btn primary">＋ 계정 추가 (claude.ai 로그인)</button>
+      <button id="refresh" class="s-btn">새로고침</button>
+    </div>
+    <div id="status-line"></div>
+    <div id="hidden-section"></div>
+
+    <h2>고정된 공유 링크</h2>
+    <div id="links" class="s-card"></div>
+    <p class="hint">패널 검색창에 아티팩트 링크를 붙여넣고 ↵ 를 누르면 여기 추가됩니다.
+    계정 간 공유받은 아티팩트는 목록 API가 아직 지원하지 않아 링크로 고정해 사용합니다.</p>
+
+    <h2>정보</h2>
+    <p class="hint">
+      Queenfish 0.1.0 — 여러 Claude 계정의 아티팩트·사용량 뷰어<br/>
+      전역 단축키 <b>⌘⇧A</b> · 15분마다 자동 갱신 · 패널을 열 때도 갱신<br/>
+      Claude Code/Orca 계정의 로그아웃은 해당 앱에서 하세요. Queenfish로 추가한 계정만 여기서 삭제됩니다.
+    </p>
+  </div>
+  <script src="settings.js"></script>
+</body>
+</html>

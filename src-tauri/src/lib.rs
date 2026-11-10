@@ -356,6 +356,26 @@ fn remove_pinned_link(app: AppHandle, url: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn open_settings(app: AppHandle) -> Result<(), String> {
+    if let Some(w) = app.get_webview_window("settings") {
+        let _ = w.show();
+        let _ = w.set_focus();
+        return Ok(());
+    }
+    tauri::WebviewWindowBuilder::new(
+        &app,
+        "settings",
+        tauri::WebviewUrl::App("settings.html".into()),
+    )
+    .title("Queenfish 설정")
+    .inner_size(500.0, 620.0)
+    .resizable(false)
+    .build()
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
 fn unhide_account(app: AppHandle, id: String) -> Result<(), String> {
     accounts::set_hidden(&app, &id, false)?;
     maybe_refresh(&app, true);
@@ -396,7 +416,8 @@ pub fn run() {
             remove_account,
             unhide_account,
             add_pinned_link,
-            remove_pinned_link
+            remove_pinned_link,
+            open_settings
         ])
         .setup(|app| {
             #[cfg(target_os = "macos")]
@@ -437,11 +458,7 @@ pub fn run() {
                         });
                     }
                     "manage" => {
-                        if let Some(win) = app.get_webview_window("main") {
-                            let _ = win.show();
-                            let _ = win.set_focus();
-                        }
-                        let _ = app.emit("show-manage", ());
+                        let _ = open_settings(app.clone());
                     }
                     "quit" => app.exit(0),
                     _ => {}

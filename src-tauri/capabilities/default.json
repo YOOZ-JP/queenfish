@@ -1,6 +1,6 @@
 {
   "identifier": "default",
   "description": "Main panel window capabilities",
-  "windows": ["main"],
+  "windows": ["main", "settings"],
   "permissions": ["core:default"]
 }

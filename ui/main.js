@@ -9,7 +9,6 @@ const $preview = document.getElementById("preview");
 const $status = document.getElementById("status");
 const $refresh = document.getElementById("refresh");
 const $manage = document.getElementById("manage");
-let manageMode = false;
 
 let data = { accounts: [], artifacts: [], last_refresh: null };
 let q = "";
@@ -81,8 +80,6 @@ function metricsFor(acc) {
   return m;
 }
 
-let pendingRemove = null; // account id awaiting second click
-
 function renderUsage() {
   const rows = data.accounts
     .map((acc) => {
@@ -110,83 +107,13 @@ function renderUsage() {
         </span>`
             )
             .join("") + resetHtml;
-      const verb = acc.removable ? "삭제" : "숨김";
-      const confirming = pendingRemove === acc.id;
-      const removeTitle = acc.removable
-        ? "Queenfish로 추가한 계정 — Keychain에서 삭제"
-        : "Claude Code/Orca가 관리하는 계정 — 목록에서만 숨김 (로그아웃은 해당 앱에서)";
-      const xBtn = manageMode
-        ? `<button class="acct-x shown ${confirming ? "confirm" : ""}" data-id="${esc(acc.id)}" data-removable="${acc.removable}" title="${esc(removeTitle)}">${confirming ? verb + "?" : "✕"}</button>`
-        : "";
       return `<div class="usage-row">
-        ${xBtn}
         <span class="usage-label" title="${esc(acc.label)} (${esc(acc.source)})">${esc(acc.label)}</span>
         <span class="usage-metrics">${inner}</span>
       </div>`;
     })
     .join("");
-  const hiddenRow = manageMode && (data.hidden || []).length
-    ? `<div class="hidden-row">숨김: ${(data.hidden || [])
-        .map((h) => `<span class="chip hidden-chip" data-id="${esc(h)}" title="다시 표시">${esc(h)} ↩</span>`)
-        .join(" ")}</div>`
-    : "";
-  const addRow = manageMode
-    ? `<div class="hidden-row"><span class="chip" id="add-acct-chip" title="브라우저에서 claude.ai 로그인">＋ 계정 추가</span><span class="chip" id="manage-done-chip">완료</span></div>`
-    : "";
-  $usage.innerHTML = rows + hiddenRow + addRow;
-  const addChip = document.getElementById("add-acct-chip");
-  if (addChip) {
-    addChip.addEventListener("click", async () => {
-      try {
-        await invoke("add_account");
-        $status.textContent = "브라우저에서 로그인을 완료하세요… (5분 내)";
-      } catch (e) {
-        $status.textContent = String(e);
-      }
-    });
-  }
-  const doneChip = document.getElementById("manage-done-chip");
-  if (doneChip) {
-    doneChip.addEventListener("click", () => {
-      manageMode = false;
-      render();
-    });
-  }
-
-  for (const btn of $usage.querySelectorAll(".acct-x")) {
-    btn.addEventListener("click", async (e) => {
-      e.stopPropagation();
-      const id = btn.dataset.id;
-      const removable = btn.dataset.removable === "true";
-      if (pendingRemove !== id) {
-        pendingRemove = id;
-        renderUsage();
-        setTimeout(() => {
-          if (pendingRemove === id) {
-            pendingRemove = null;
-            renderUsage();
-          }
-        }, 3000);
-        return;
-      }
-      pendingRemove = null;
-      try {
-        const outcome = await invoke("remove_account", { id, removable });
-        $status.textContent = outcome === "deleted" ? `${id} 삭제됨` : `${id} 숨김`;
-      } catch (err) {
-        $status.textContent = String(err);
-      }
-    });
-  }
-  for (const chip of $usage.querySelectorAll(".hidden-chip")) {
-    chip.addEventListener("click", async () => {
-      try {
-        await invoke("unhide_account", { id: chip.dataset.id });
-      } catch (err) {
-        $status.textContent = String(err);
-      }
-    });
-  }
+  $usage.innerHTML = rows;
 }
 
 /* ---------- chips ---------- */
@@ -450,6 +377,9 @@ window.addEventListener("keydown", (e) => {
   } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "r") {
     e.preventDefault();
     triggerRefresh();
+  } else if ((e.metaKey || e.ctrlKey) && e.key === ",") {
+    e.preventDefault();
+    invoke("open_settings");
   }
 });
 
@@ -462,13 +392,9 @@ function triggerRefresh() {
 $refresh.addEventListener("click", triggerRefresh);
 
 $manage.addEventListener("click", () => {
-  manageMode = !manageMode;
-  render();
-});
-
-listen("show-manage", () => {
-  manageMode = true;
-  render();
+  invoke("open_settings").catch((e) => {
+    $status.textContent = String(e);
+  });
 });
 
 listen("login-done", (ev) => {
