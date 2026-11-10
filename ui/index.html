@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Queenfish</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="panel">
+    <div class="searchbar">
+      <input id="search" type="text" placeholder="아티팩트 검색…" autocomplete="off" spellcheck="false" />
+    </div>
+    <div id="usage" class="usage"></div>
+    <div id="chips" class="chips"></div>
+    <div id="list" class="list"></div>
+    <div class="footer">
+      <span id="status"></span>
+      <span class="hints">↵ 열기 · ⌘C 복사 · esc 닫기</span>
+      <button id="add-account" title="Claude 계정 추가 (브라우저에서 로그인)">＋</button>
+      <button id="refresh" title="새로고침 (⌘R)">↻</button>
+    </div>
+  </div>
+  <script src="main.js"></script>
+</body>
+</html>
