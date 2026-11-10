@@ -335,12 +335,24 @@ $search.addEventListener("input", () => {
 window.addEventListener("keydown", (e) => {
   if (e.key === "ArrowDown") {
     e.preventDefault();
+    if (qlVisible()) closeQl();
     sel = Math.min(visibleItems.length - 1, sel + 1);
     highlight();
   } else if (e.key === "ArrowUp") {
     e.preventDefault();
+    if (qlVisible()) closeQl();
     sel = Math.max(0, sel - 1);
     highlight();
+  } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "p") {
+    e.preventDefault();
+    if (qlVisible()) closeQl();
+    else openQl();
+  } else if (e.key === "ArrowRight" && $search.value === "" && !qlVisible()) {
+    e.preventDefault();
+    openQl();
+  } else if (e.key === "ArrowLeft" && qlVisible()) {
+    e.preventDefault();
+    closeQl();
   } else if (e.key === "Enter") {
     e.preventDefault();
     if (isArtifactUrl(q)) {
@@ -368,7 +380,8 @@ window.addEventListener("keydown", (e) => {
     openItem(visibleItems[sel]);
   } else if (e.key === "Escape") {
     e.preventDefault();
-    invoke("hide_panel");
+    if (qlVisible()) closeQl();
+    else invoke("hide_panel");
   } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "c") {
     if (!window.getSelection()?.toString()) {
       e.preventDefault();
@@ -397,6 +410,24 @@ $manage.addEventListener("click", () => {
   });
 });
 
+/* ---------- in-app preview window ---------- */
+
+function qlVisible() {
+  return false;
+}
+
+function closeQl() {}
+
+function openQl() {
+  const item = visibleItems[sel];
+  if (!item) return;
+  invoke("open_preview_window", { url: item.url, title: item.title }).catch((e) => {
+    $status.textContent = String(e);
+  });
+}
+
+$preview.addEventListener("click", openQl);
+
 listen("login-done", (ev) => {
   const p = String(ev.payload || "");
   if (p.startsWith("ok:")) {
@@ -411,6 +442,7 @@ listen("data-updated", () => {
   reload();
 });
 listen("panel-shown", () => {
+  closeQl();
   $search.focus();
   $search.select();
   reload();

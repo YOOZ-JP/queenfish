@@ -355,6 +355,30 @@ fn remove_pinned_link(app: AppHandle, url: String) -> Result<(), String> {
     Ok(())
 }
 
+/// Open (or reuse) a small in-app browser window showing the artifact page.
+/// The window is a normal web view: sign in to claude.ai once inside it and
+/// private artifacts render like in a browser.
+#[tauri::command]
+fn open_preview_window(app: AppHandle, url: String, title: String) -> Result<(), String> {
+    if !url.starts_with("https://claude.ai/") && !url.starts_with("https://claude.com/") {
+        return Err("허용되지 않은 URL".to_string());
+    }
+    let parsed: tauri::Url = url.parse().map_err(|_| "URL 파싱 실패".to_string())?;
+    if let Some(w) = app.get_webview_window("preview") {
+        let _ = w.navigate(parsed);
+        let _ = w.set_title(&format!("미리보기 — {title}"));
+        let _ = w.show();
+        let _ = w.set_focus();
+        return Ok(());
+    }
+    tauri::WebviewWindowBuilder::new(&app, "preview", tauri::WebviewUrl::External(parsed))
+        .title(format!("미리보기 — {title}"))
+        .inner_size(520.0, 700.0)
+        .build()
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 #[tauri::command]
 fn open_settings(app: AppHandle) -> Result<(), String> {
     if let Some(w) = app.get_webview_window("settings") {
@@ -417,7 +441,8 @@ pub fn run() {
             unhide_account,
             add_pinned_link,
             remove_pinned_link,
-            open_settings
+            open_settings,
+            open_preview_window
         ])
         .setup(|app| {
             #[cfg(target_os = "macos")]

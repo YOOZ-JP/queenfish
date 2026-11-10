@@ -16,12 +16,17 @@ function esc(s) {
 }
 
 function sourceLabel(src) {
-  if (src.startsWith("queenfish")) return "Queenfish";
-  if (src.includes("file:") && src.includes("orca")) return "Orca";
-  if (src.startsWith("keychain-")) return "Orca/프로필";
-  if (src.startsWith("keychain")) return "Claude Code";
-  if (src.startsWith("file:")) return "파일";
-  return src;
+  if (src.startsWith("queenfish")) return ["Queenfish", "Queenfish에서 로그인해 추가한 계정"];
+  if (src.includes("file:") && src.includes("orca"))
+    return ["Orca", "Orca 프로필 폴더의 자격증명 파일"];
+  if (src.startsWith("keychain-"))
+    return [
+      "Claude Code 프로필",
+      "별도 프로필용 Keychain 항목 — Orca 등이 계정 전환을 위해 만든 Claude Code 프로필의 토큰",
+    ];
+  if (src.startsWith("keychain")) return ["Claude Code", "Claude Code 기본 Keychain 항목"];
+  if (src.startsWith("file:")) return ["파일", src];
+  return [src, src];
 }
 
 function armConfirm(key, cb) {
@@ -47,12 +52,14 @@ function render() {
       .map((a) => {
         const confirming = pending === `acct:${a.id}`;
         const verb = a.removable ? "삭제" : "숨김";
+        const nArts = data.artifacts.filter((x) => x.account_id === a.id).length;
         const sub = a.error
           ? `<div class="s-sub err" title="${esc(a.error)}">${esc(a.error)}</div>`
-          : `<div class="s-sub">정상 · 사용량/아티팩트 조회 중</div>`;
+          : `<div class="s-sub">정상 · 아티팩트 ${nArts}개${a.usage ? " · 사용량 조회됨" : ""}</div>`;
+        const [srcName, srcDesc] = sourceLabel(a.source);
         return `<div class="s-row">
           <div class="s-main">
-            <div class="s-title">${esc(a.label)}<span class="tag">${esc(sourceLabel(a.source))}</span></div>
+            <div class="s-title">${esc(a.label)}<span class="tag" title="${esc(srcDesc)}">${esc(srcName)}</span></div>
             ${sub}
           </div>
           <button class="s-btn danger ${confirming ? "confirm" : ""}" data-act="acct" data-id="${esc(a.id)}" data-removable="${a.removable}"
@@ -144,7 +151,7 @@ document.getElementById("add").addEventListener("click", async () => {
   }
 });
 
-document.getElementById("refresh").addEventListener("click", () => {
+document.getElementById("s-refresh").addEventListener("click", () => {
   invoke("refresh_now");
   $status.textContent = "새로고침 중…";
 });
