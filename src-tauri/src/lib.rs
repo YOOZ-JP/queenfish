@@ -46,6 +46,8 @@ pub struct ArtifactView {
     pub account_label: String,
     #[serde(default = "default_rel")]
     pub rel: String,
+    #[serde(default)]
+    pub type_title: Option<String>,
 }
 
 fn default_rel() -> String {
@@ -193,6 +195,7 @@ async fn refresh_all(app: AppHandle) {
                     account_id: id.clone(),
                     account_label: label.clone(),
                     rel: a.rel,
+                    type_title: a.type_title,
                 }));
             }
             Err(e) => {
@@ -248,6 +251,7 @@ async fn refresh_all(app: AppHandle) {
             account_id: "pinned".to_string(),
             account_label: "링크".to_string(),
             rel: "shared".to_string(),
+            type_title: None,
         });
     }
 
@@ -409,9 +413,16 @@ pub fn run() {
 
             let toggle_i = MenuItem::with_id(app, "toggle", "패널 열기/닫기  ⌘⇧A", true, None::<&str>)?;
             let refresh_i = MenuItem::with_id(app, "refresh", "지금 새로고침", true, None::<&str>)?;
+            let add_acct_i =
+                MenuItem::with_id(app, "add-account", "계정 추가 (claude.ai 로그인)…", true, None::<&str>)?;
+            let manage_i = MenuItem::with_id(app, "manage", "계정 관리…", true, None::<&str>)?;
             let quit_i = MenuItem::with_id(app, "quit", "Queenfish 종료", true, None::<&str>)?;
-            let sep = PredefinedMenuItem::separator(app)?;
-            let menu = Menu::with_items(app, &[&toggle_i, &refresh_i, &sep, &quit_i])?;
+            let sep1 = PredefinedMenuItem::separator(app)?;
+            let sep2 = PredefinedMenuItem::separator(app)?;
+            let menu = Menu::with_items(
+                app,
+                &[&toggle_i, &refresh_i, &sep1, &add_acct_i, &manage_i, &sep2, &quit_i],
+            )?;
             TrayIconBuilder::with_id("tray")
                 .title("✦")
                 .tooltip("Queenfish — Claude 아티팩트 & 사용량")
@@ -419,6 +430,19 @@ pub fn run() {
                 .on_menu_event(|app, e| match e.id().as_ref() {
                     "toggle" => toggle_panel(app),
                     "refresh" => maybe_refresh(app, true),
+                    "add-account" => {
+                        let app2 = app.clone();
+                        tauri::async_runtime::spawn(async move {
+                            let _ = oauth::start_login(app2).await;
+                        });
+                    }
+                    "manage" => {
+                        if let Some(win) = app.get_webview_window("main") {
+                            let _ = win.show();
+                            let _ = win.set_focus();
+                        }
+                        let _ = app.emit("show-manage", ());
+                    }
                     "quit" => app.exit(0),
                     _ => {}
                 })

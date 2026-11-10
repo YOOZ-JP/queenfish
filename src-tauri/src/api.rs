@@ -16,6 +16,7 @@ pub struct Artifact {
     pub url: String,
     pub updated_at: Option<String>,
     pub rel: String, // "mine" | "shared"
+    pub type_title: Option<String>,
 }
 
 pub struct Client {
@@ -236,6 +237,7 @@ impl Client {
                         .and_then(|x| x.as_str())
                         .unwrap_or(default_rel)
                         .to_string(),
+                    type_title: it.get("type_title").and_then(|x| x.as_str()).map(String::from),
                 });
             }
             return Ok(out);

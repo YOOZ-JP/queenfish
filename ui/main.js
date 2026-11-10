@@ -5,8 +5,11 @@ const $search = document.getElementById("search");
 const $usage = document.getElementById("usage");
 const $chips = document.getElementById("chips");
 const $list = document.getElementById("list");
+const $preview = document.getElementById("preview");
 const $status = document.getElementById("status");
 const $refresh = document.getElementById("refresh");
+const $manage = document.getElementById("manage");
+let manageMode = false;
 
 let data = { accounts: [], artifacts: [], last_refresh: null };
 let q = "";
@@ -104,19 +107,43 @@ function renderUsage() {
       const removeTitle = acc.removable
         ? "Queenfish로 추가한 계정 — Keychain에서 삭제"
         : "Claude Code/Orca가 관리하는 계정 — 목록에서만 숨김 (로그아웃은 해당 앱에서)";
+      const xBtn = manageMode
+        ? `<button class="acct-x shown ${confirming ? "confirm" : ""}" data-id="${esc(acc.id)}" data-removable="${acc.removable}" title="${esc(removeTitle)}">${confirming ? verb + "?" : "✕"}</button>`
+        : "";
       return `<div class="usage-row">
-        <button class="acct-x ${confirming ? "confirm" : ""}" data-id="${esc(acc.id)}" data-removable="${acc.removable}" title="${esc(removeTitle)}">${confirming ? verb + "?" : "✕"}</button>
+        ${xBtn}
         <span class="usage-label" title="${esc(acc.label)} (${esc(acc.source)})">${esc(acc.label)}</span>
         <span class="usage-metrics">${inner}</span>
       </div>`;
     })
     .join("");
-  const hiddenRow = (data.hidden || []).length
+  const hiddenRow = manageMode && (data.hidden || []).length
     ? `<div class="hidden-row">숨김: ${(data.hidden || [])
         .map((h) => `<span class="chip hidden-chip" data-id="${esc(h)}" title="다시 표시">${esc(h)} ↩</span>`)
         .join(" ")}</div>`
     : "";
-  $usage.innerHTML = rows + hiddenRow;
+  const addRow = manageMode
+    ? `<div class="hidden-row"><span class="chip" id="add-acct-chip" title="브라우저에서 claude.ai 로그인">＋ 계정 추가</span><span class="chip" id="manage-done-chip">완료</span></div>`
+    : "";
+  $usage.innerHTML = rows + hiddenRow + addRow;
+  const addChip = document.getElementById("add-acct-chip");
+  if (addChip) {
+    addChip.addEventListener("click", async () => {
+      try {
+        await invoke("add_account");
+        $status.textContent = "브라우저에서 로그인을 완료하세요… (5분 내)";
+      } catch (e) {
+        $status.textContent = String(e);
+      }
+    });
+  }
+  const doneChip = document.getElementById("manage-done-chip");
+  if (doneChip) {
+    doneChip.addEventListener("click", () => {
+      manageMode = false;
+      render();
+    });
+  }
 
   for (const btn of $usage.querySelectorAll(".acct-x")) {
     btn.addEventListener("click", async (e) => {
@@ -225,12 +252,14 @@ function renderList() {
   if (isArtifactUrl(q)) {
     const n = extractArtifactUrls(q).length;
     $list.innerHTML = `<div class="empty">🔗 아티팩트 링크 ${n}개 감지<br/><b>↵ Enter</b>를 누르면 목록에 추가됩니다</div>`;
+    $preview.hidden = true;
     return;
   }
   if (visibleItems.length === 0) {
     $list.innerHTML = `<div class="empty">${
       data.artifacts.length === 0 ? "아티팩트가 없습니다 · ↻로 새로고침" : "검색 결과 없음"
     }</div>`;
+    $preview.hidden = true;
     return;
   }
   $list.innerHTML = visibleItems
@@ -268,6 +297,7 @@ function renderList() {
       }
     });
   }
+  renderPreview();
 }
 
 function highlight() {
@@ -275,6 +305,40 @@ function highlight() {
   rows.forEach((r, i) => r.classList.toggle("selected", i === sel));
   const node = rows[sel];
   if (node) node.scrollIntoView({ block: "nearest" });
+  renderPreview();
+}
+
+function fullTime(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleString("ko-KR", {
+    year: "numeric", month: "numeric", day: "numeric",
+    hour: "2-digit", minute: "2-digit",
+  });
+}
+
+function renderPreview() {
+  const a = visibleItems[sel];
+  if (!a) {
+    $preview.hidden = true;
+    return;
+  }
+  const metaBits = [
+    a.account_label,
+    a.type_title,
+    a.rel === "shared" ? "공유받음" : null,
+    fullTime(a.updated_at),
+  ].filter(Boolean);
+  $preview.hidden = false;
+  $preview.innerHTML = `
+    <div class="pv-head">
+      <span class="pv-icon">${esc(a.favicon || "✦")}</span>
+      <span class="pv-title">${esc(a.title)}</span>
+    </div>
+    ${a.description ? `<div class="pv-desc">${esc(a.description)}</div>` : ""}
+    <div class="pv-meta">${metaBits.map((m) => `<span>${esc(m)}</span>`).join("<span class=\"pv-dot\">·</span>")}</div>
+    <div class="pv-url" title="${esc(a.url)}">${esc(a.url)}</div>`;
 }
 
 function renderStatus() {
@@ -389,13 +453,14 @@ function triggerRefresh() {
 
 $refresh.addEventListener("click", triggerRefresh);
 
-document.getElementById("add-account").addEventListener("click", async () => {
-  try {
-    await invoke("add_account");
-    $status.textContent = "브라우저에서 로그인을 완료하세요… (5분 내)";
-  } catch (e) {
-    $status.textContent = String(e);
-  }
+$manage.addEventListener("click", () => {
+  manageMode = !manageMode;
+  render();
+});
+
+listen("show-manage", () => {
+  manageMode = true;
+  render();
 });
 
 listen("login-done", (ev) => {

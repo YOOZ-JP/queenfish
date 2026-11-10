@@ -1,7 +1,9 @@
 # Queenfish
 
 여러 Claude 계정의 **아티팩트**와 **사용량(5시간 세션 / 주간 / 모델별 주간 한도)** 을
-Maccy처럼 메뉴바 + 전역 단축키 패널로 빠르게 보는 macOS 앱. Rust + Tauri v2.
+Maccy처럼 메뉴바 + 전역 단축키 패널로 빠르게 보는 macOS 앱. Rust + Tauri v2. MIT 라이선스.
+
+<p align="center"><img src="docs/screenshot.png" width="460" alt="Queenfish panel" /></p>
 
 ## 동작 방식
 
@@ -31,7 +33,11 @@ cargo run
 - 첫 실행 시 Keychain 접근 대화상자가 뜨면 **항상 허용**을 누른다.
 - 메뉴바의 `✦` 아이콘, 전역 단축키 **⌘⇧A** 로 패널을 연다.
 - 패널: 타이핑으로 검색, `↑↓` 이동, `↵` 열기(기본 브라우저), `⌘C` 링크 복사, `esc` 닫기, `⌘R` 새로고침.
-- 데이터는 15분마다, 그리고 패널을 열 때(60초 스로틀) 갱신된다.
+- 선택한 항목의 **미리보기**(제목·설명·종류·계정·수정시각·URL)가 하단에 표시된다.
+- 아티팩트 링크를 검색창에 붙여넣고 `↵` 하면 목록에 고정된다 (여러 개 한번에 가능).
+- 트레이 메뉴(✦ 우클릭)에서 계정 추가·계정 관리, 패널 `⚙` 버튼으로 관리 모드 토글.
+- 데이터는 15분마다, 그리고 패널을 열 때(60초 스로틀) 갱신된다. 429를 만나면
+  이전 데이터를 유지한 채 10분 쿨다운한다.
 
 ## 계정 추가 / 삭제
 
@@ -52,15 +58,16 @@ cargo run
   { "custom_homes": ["/path/to/that/home"] }
   ```
 
-## 번들(.app) 만들기
-
-아이콘 생성 후 빌드 (Tauri CLI는 npx 프리빌드 바이너리 사용):
+## 번들(.app / .dmg) 만들기
 
 ```bash
-npx @tauri-apps/cli icon path/to/icon-1024.png
-# tauri.conf.json 의 bundle.active 를 true 로 바꾸고 bundle.icon 지정
+cd src-tauri
 npx @tauri-apps/cli build
+# 결과물: src-tauri/target/release/bundle/macos/Queenfish.app
+#         src-tauri/target/release/bundle/dmg/Queenfish_0.1.0_aarch64.dmg
 ```
+
+서명 없이 빌드되므로(ad-hoc) 다른 맥에서 열 때는 우클릭 → 열기가 필요할 수 있다.
 
 ## 구조
 
