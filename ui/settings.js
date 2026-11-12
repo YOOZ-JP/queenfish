@@ -15,7 +15,14 @@ function esc(s) {
   })[c]);
 }
 
+function displayId(id) {
+  return id.startsWith("codex:") ? `Codex · ${id.slice(6)}` : id;
+}
+
 function sourceLabel(src) {
+  if (src === "codex-orca") return ["Codex · Orca", "Orca가 관리하는 Codex 계정의 로그인 파일 (auth.json)"];
+  if (src === "codex-custom") return ["Codex", "config.json의 custom_codex_homes에 지정한 Codex 홈"];
+  if (src === "codex") return ["Codex", "Codex CLI 로그인 파일 (auth.json)"];
   if (src.startsWith("queenfish")) return ["Queenfish", "Queenfish에서 로그인해 추가한 계정"];
   if (src.includes("file:") && src.includes("orca"))
     return ["Orca", "Orca 프로필 폴더의 자격증명 파일"];
@@ -52,18 +59,25 @@ function render() {
       .map((a) => {
         const confirming = pending === `acct:${a.id}`;
         const verb = a.removable ? "삭제" : "숨김";
+        const isCodex = a.provider === "codex";
         const nArts = data.artifacts.filter((x) => x.account_id === a.id).length;
+        const okBits = isCodex
+          ? ["정상", a.usage ? "사용량 조회됨" : null, a.usage?.plan_type ? `플랜 ${a.usage.plan_type}` : null]
+          : ["정상", `아티팩트 ${nArts}개`, a.usage ? "사용량 조회됨" : null];
         const sub = a.error
           ? `<div class="s-sub err" title="${esc(a.error)}">${esc(a.error)}</div>`
-          : `<div class="s-sub">정상 · 아티팩트 ${nArts}개${a.usage ? " · 사용량 조회됨" : ""}</div>`;
+          : `<div class="s-sub">${esc(okBits.filter(Boolean).join(" · "))}</div>`;
         const [srcName, srcDesc] = sourceLabel(a.source);
+        const hideTitle = isCodex
+          ? "목록에서 숨김 (로그아웃은 Codex에서)"
+          : "목록에서 숨김 (로그아웃은 Claude Code/Orca에서)";
         return `<div class="s-row">
           <div class="s-main">
             <div class="s-title">${esc(a.label)}<span class="tag" title="${esc(srcDesc)}">${esc(srcName)}</span></div>
             ${sub}
           </div>
           <button class="s-btn danger ${confirming ? "confirm" : ""}" data-act="acct" data-id="${esc(a.id)}" data-removable="${a.removable}"
-            title="${a.removable ? "Queenfish Keychain에서 삭제" : "목록에서 숨김 (로그아웃은 Claude Code/Orca에서)"}">
+            title="${a.removable ? "Queenfish Keychain에서 삭제" : hideTitle}">
             ${confirming ? verb + "?" : verb}
           </button>
         </div>`;
@@ -75,7 +89,7 @@ function render() {
     ? `<p class="hint">숨긴 계정: ${(data.hidden || [])
         .map(
           (h) =>
-            `<button class="s-btn" data-act="unhide" data-id="${esc(h)}">${esc(h)} 복원</button>`
+            `<button class="s-btn" data-act="unhide" data-id="${esc(h)}">${esc(displayId(h))} 복원</button>`
         )
         .join(" ")}</p>`
     : "";
@@ -108,7 +122,7 @@ function render() {
         armConfirm(`acct:${id}`, async () => {
           try {
             const outcome = await invoke("remove_account", { id, removable });
-            $status.textContent = outcome === "deleted" ? `${id} 삭제됨` : `${id} 숨김`;
+            $status.textContent = `${displayId(id)} ${outcome === "deleted" ? "삭제됨" : "숨김"}`;
           } catch (e) {
             $status.textContent = String(e);
           }

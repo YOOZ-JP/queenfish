@@ -59,8 +59,30 @@ function esc(s) {
 
 /* ---------- usage ---------- */
 
+function windowLabel(seconds) {
+  if (typeof seconds !== "number" || seconds <= 0) return "한도";
+  const hours = seconds / 3600;
+  if (Math.abs(hours - 5) < 0.5) return "5시간";
+  if (Math.abs(hours - 168) < 1) return "주간";
+  return hours < 48 ? `${Math.round(hours)}시간` : `${Math.round(hours / 24)}일`;
+}
+
+function codexMetrics(u) {
+  const m = [];
+  for (const w of [u.rate_limit?.primary_window, u.rate_limit?.secondary_window]) {
+    if (!w || typeof w.used_percent !== "number") continue;
+    m.push({
+      label: windowLabel(w.limit_window_seconds),
+      pct: w.used_percent,
+      resets: typeof w.reset_at === "number" ? new Date(w.reset_at * 1000).toISOString() : null,
+    });
+  }
+  return m;
+}
+
 function metricsFor(acc) {
   const u = acc.usage || {};
+  if (acc.provider === "codex") return codexMetrics(u);
   const m = [];
   const direct = (obj, label) => {
     if (obj && typeof obj.utilization === "number") {
@@ -107,8 +129,11 @@ function renderUsage() {
         </span>`
             )
             .join("") + resetHtml;
+      const isCodex = acc.provider === "codex";
+      const plan = isCodex && acc.usage?.plan_type ? ` · 플랜 ${acc.usage.plan_type}` : "";
+      const labelTitle = isCodex ? `Codex · ${acc.label}${plan}` : `${acc.label} (${acc.source})`;
       return `<div class="usage-row">
-        <span class="usage-label" title="${esc(acc.label)} (${esc(acc.source)})">${esc(acc.label)}</span>
+        <span class="usage-label" title="${esc(labelTitle)}">${isCodex ? '<span class="prov-tag">Codex</span>' : ""}${esc(acc.label)}</span>
         <span class="usage-metrics">${inner}</span>
       </div>`;
     })
@@ -132,8 +157,10 @@ function renderChips() {
       )
       .join("");
   }
-  if (data.accounts.length >= 2) {
-    const chips = [{ id: null, label: "전체" }, ...data.accounts.map((a) => ({ id: a.id, label: a.label }))];
+  // Codex accounts only report usage, so they get no artifact filter chip
+  const artifactAccounts = data.accounts.filter((a) => a.provider !== "codex");
+  if (artifactAccounts.length >= 2) {
+    const chips = [{ id: null, label: "전체" }, ...artifactAccounts.map((a) => ({ id: a.id, label: a.label }))];
     html += chips
       .map(
         (c) =>

@@ -12,6 +12,7 @@ use tauri_plugin_opener::OpenerExt;
 
 mod accounts;
 mod api;
+mod codex;
 mod oauth;
 
 #[derive(Serialize, Deserialize, Clone, Default)]
@@ -28,10 +29,16 @@ pub struct AccountView {
     pub id: String,
     pub label: String,
     pub source: String,
+    #[serde(default = "default_provider")]
+    pub provider: String, // "claude" | "codex"
     pub usage: Option<serde_json::Value>,
     pub error: Option<String>,
     #[serde(default)]
     pub removable: bool,
+}
+
+fn default_provider() -> String {
+    "claude".to_string()
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -253,6 +260,7 @@ async fn refresh_all(app: AppHandle) {
                 id,
                 label,
                 source: src.origin.clone(),
+                provider: default_provider(),
                 usage: None,
                 error: Some(message.to_string()),
                 removable: owned_email.is_some(),
@@ -308,6 +316,7 @@ async fn refresh_all(app: AppHandle) {
             id,
             label,
             source: src.origin.clone(),
+            provider: default_provider(),
             usage,
             error,
             removable: owned_email.is_some(),
@@ -315,6 +324,39 @@ async fn refresh_all(app: AppHandle) {
     }
 
     views.sort_by_key(|v| discovery_order.iter().position(|o| *o == v.source));
+
+    let codex_http = codex::http_client();
+    for src in codex::discover(&app) {
+        let label = src.label();
+        // prefixed so a Codex login never collides with a Claude account on the same email
+        let id = format!("codex:{label}");
+        if hidden.iter().any(|h| h == &id) {
+            continue;
+        }
+        let (usage, error) = match codex::fetch_usage(&codex_http, &src).await {
+            Ok(u) => (Some(u), None),
+            Err(e) => {
+                let kept = if e.contains("429") {
+                    prev.accounts
+                        .iter()
+                        .find(|a| a.id == id)
+                        .and_then(|v| v.usage.clone())
+                } else {
+                    None
+                };
+                (kept, Some(e))
+            }
+        };
+        views.push(AccountView {
+            id,
+            label,
+            source: src.origin,
+            provider: "codex".to_string(),
+            usage,
+            error,
+            removable: false,
+        });
+    }
 
     if email_map_dirty {
         accounts::save_email_map(&app, &email_map);
@@ -538,7 +580,7 @@ pub fn run() {
             )?;
             TrayIconBuilder::with_id("tray")
                 .title("✦")
-                .tooltip("Queenfish — Claude 아티팩트 & 사용량")
+                .tooltip("Queenfish — Claude 아티팩트 · Claude/Codex 사용량")
                 .menu(&menu)
                 .on_menu_event(|app, e| match e.id().as_ref() {
                     "toggle" => toggle_panel(app),
