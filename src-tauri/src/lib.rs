@@ -59,6 +59,28 @@ pub struct AppState {
     snapshot: Mutex<Snapshot>,
     last_refresh_started: Mutex<Option<Instant>>,
     cooldown_until: Mutex<Option<Instant>>,
+    refresh_run: Mutex<RefreshRun>,
+}
+
+/// Refresh passes never overlap: two passes refreshing the same single-use
+/// refresh token at once would leave that login dead.
+#[derive(Default)]
+struct RefreshRun {
+    running: bool,
+    rerun: bool,
+}
+
+/// Clears `running` if a refresh pass panics, so later refreshes aren't blocked forever.
+struct RefreshRunGuard(AppHandle);
+
+impl Drop for RefreshRunGuard {
+    fn drop(&mut self) {
+        if std::thread::panicking() {
+            if let Ok(mut run) = self.0.state::<AppState>().refresh_run.lock() {
+                run.running = false;
+            }
+        }
+    }
 }
 
 pub(crate) fn now_ms() -> u64 {
@@ -112,15 +134,41 @@ pub fn maybe_refresh(app: &AppHandle, force: bool) {
         }
         *last = Some(Instant::now());
     }
+    {
+        let mut run = state.refresh_run.lock().unwrap();
+        if run.running {
+            // a forced request may follow a config change the running pass already read past
+            run.rerun |= force;
+            return;
+        }
+        run.running = true;
+    }
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
-        refresh_all(app).await;
+        let _guard = RefreshRunGuard(app.clone());
+        loop {
+            refresh_all(app.clone()).await;
+            let again = {
+                let state: State<AppState> = app.state();
+                let mut run = state.refresh_run.lock().unwrap();
+                let again = std::mem::take(&mut run.rerun);
+                run.running = again;
+                again
+            };
+            if !again {
+                break;
+            }
+        }
     });
 }
 
 async fn refresh_all(app: AppHandle) {
     let client = api::Client::new();
-    let sources = accounts::discover_credentials(&app).await;
+    let mut sources = accounts::discover_credentials(&app).await;
+    // An account can be logged in from several places; let a live copy claim it
+    // before an expired one does, then restore discovery order for display.
+    let discovery_order: Vec<String> = sources.iter().map(|s| s.origin.clone()).collect();
+    sources.sort_by_key(|s| s.cred.expires_at.is_some_and(|exp| now_ms() + 60_000 > exp));
     let hidden = accounts::hidden_accounts(&app);
     let prev = app.state::<AppState>().snapshot.lock().unwrap().clone();
     let mut email_map = accounts::load_email_map(&app);
@@ -131,11 +179,27 @@ async fn refresh_all(app: AppHandle) {
     let mut seen_emails: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     for src in &sources {
+        // Queenfish's own logins carry their account email in the origin.
+        let owned_email = src.origin.strip_prefix("queenfish:");
         let mut token = src.cred.access_token.clone();
-        if let (Some(exp), Some(rt)) = (src.cred.expires_at, src.cred.refresh_token.as_ref()) {
-            if now_ms() + 60_000 > exp {
-                if let Some(new_tok) = client.refresh_token(rt).await {
-                    token = new_tok;
+        let mut expired = src
+            .cred
+            .expires_at
+            .is_some_and(|exp| now_ms() + 60_000 > exp);
+        if expired {
+            // Refresh tokens are single-use, so only logins Queenfish stored itself are
+            // refreshed (and the rotated pair saved back). Refreshing a login that
+            // Claude Code or Orca stored would sign that app out.
+            if let (Some(email), Some(rt)) = (owned_email, src.cred.refresh_token.as_deref()) {
+                if let Some(new) = client.refresh_token(rt).await {
+                    let _ = oauth::store_credentials(
+                        email,
+                        &new.access_token,
+                        new.refresh_token.as_deref().or(Some(rt)),
+                        now_ms() + new.expires_in * 1000,
+                    );
+                    token = new.access_token;
+                    expired = false;
                 }
             }
         }
@@ -143,12 +207,15 @@ async fn refresh_all(app: AppHandle) {
         // Identity: cached token→email mapping first; profile endpoint only on miss.
         let fp = accounts::token_fingerprint(&token);
         let mut email = email_map.get(&fp).cloned();
-        if email.is_none() {
+        if email.is_none() && !expired {
             email = client.fetch_profile_email(&token).await;
             if let Some(e) = &email {
                 email_map.insert(fp, e.clone());
                 email_map_dirty = true;
             }
+        }
+        if email.is_none() {
+            email = owned_email.map(String::from);
         }
         // Last resort: reuse the previous label for this credential origin.
         if email.is_none() {
@@ -169,6 +236,29 @@ async fn refresh_all(app: AppHandle) {
             continue;
         }
         let prev_view = prev.accounts.iter().find(|a| a.id == id);
+
+        if expired {
+            arts.extend(
+                prev.artifacts
+                    .iter()
+                    .filter(|a| a.account_id == id)
+                    .cloned(),
+            );
+            let message = if owned_email.is_some() {
+                "로그인 만료 — 설정에서 이 계정을 삭제한 뒤 다시 추가하세요"
+            } else {
+                api::TOKEN_EXPIRED
+            };
+            views.push(AccountView {
+                id,
+                label,
+                source: src.origin.clone(),
+                usage: None,
+                error: Some(message.to_string()),
+                removable: owned_email.is_some(),
+            });
+            continue;
+        }
 
         let mut error: Option<String> = None;
         let mut usage: Option<serde_json::Value> = None;
@@ -220,9 +310,11 @@ async fn refresh_all(app: AppHandle) {
             source: src.origin.clone(),
             usage,
             error,
-            removable: src.origin.starts_with("queenfish"),
+            removable: owned_email.is_some(),
         });
     }
+
+    views.sort_by_key(|v| discovery_order.iter().position(|o| *o == v.source));
 
     if email_map_dirty {
         accounts::save_email_map(&app, &email_map);

@@ -16,7 +16,7 @@ Maccy처럼 메뉴바 + 전역 단축키 패널로 빠르게 보는 macOS 앱. R
 | 계정 식별 | `GET https://api.anthropic.com/api/oauth/profile` → 토큰의 실소유 이메일 (라벨/중복 판정의 기준) |
 | 사용량 | `GET https://api.anthropic.com/api/oauth/usage` (`Authorization: Bearer`, `anthropic-beta: oauth-2025-04-20`) |
 | 아티팩트 | `https://claude.ai/api/artifacts/mcp` (Claude Code가 쓰는 artifacts MCP 서버의 `list_artifacts` 툴). 내 항목 + 공유받음(`shared_only`) 둘 다 조회, 리스트에 `공유받음` 배지/필터 표시 |
-| 토큰 갱신 | 만료 시 refresh-token grant 시도 (메모리에서만 사용, 디스크/Keychain에 저장하지 않음) |
+| 토큰 갱신 | Queenfish가 직접 추가한 계정만 만료 시 refresh-token grant로 갱신하고, 새 토큰을 Queenfish 전용 Keychain 항목에 다시 저장. Claude Code/Orca가 저장한 로그인은 **갱신하지 않는다** — refresh token이 1회용이라 대신 갱신하면 그 앱이 로그아웃되기 때문. 만료되면 "토큰 만료"로 표시되고, 해당 계정으로 Claude를 한 번 실행하면 다시 표시된다 |
 
 > 사용량/아티팩트 엔드포인트는 공식 공개 API가 아니라 Claude Code·Orca가 쓰는 내부
 > 표면이다. 예고 없이 바뀔 수 있다. 참고:

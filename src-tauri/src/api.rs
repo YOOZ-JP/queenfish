@@ -8,6 +8,15 @@ const USAGE_URL: &str = "https://api.anthropic.com/api/oauth/usage";
 const PROFILE_URL: &str = "https://api.anthropic.com/api/oauth/profile";
 const ARTIFACTS_MCP_URL: &str = "https://claude.ai/api/artifacts/mcp";
 
+pub const TOKEN_EXPIRED: &str = "토큰 만료 — 이 계정으로 Claude를 한 번 실행하면 갱신됩니다";
+
+pub struct RefreshedToken {
+    pub access_token: String,
+    /// Set when the server rotated the refresh token; the old one is then dead.
+    pub refresh_token: Option<String>,
+    pub expires_in: u64, // seconds
+}
+
 pub struct Artifact {
     pub slug: String,
     pub title: String,
@@ -68,7 +77,7 @@ impl Client {
             .map_err(|e| format!("사용량 요청 실패: {e}"))?;
         let status = resp.status();
         if status.as_u16() == 401 || status.as_u16() == 403 {
-            return Err("토큰 만료 — 이 계정으로 Claude를 한 번 실행하면 갱신됩니다".to_string());
+            return Err(TOKEN_EXPIRED.to_string());
         }
         if status.as_u16() == 429 {
             return Err("HTTP 429 — 요청 한도, 잠시 후 자동 재시도".to_string());
@@ -94,7 +103,7 @@ impl Client {
             .map_err(|e| format!("아티팩트 요청 실패: {e}"))?;
         let status = resp.status();
         if status.as_u16() == 401 || status.as_u16() == 403 {
-            return Err("토큰 만료 — 이 계정으로 Claude를 한 번 실행하면 갱신됩니다".to_string());
+            return Err(TOKEN_EXPIRED.to_string());
         }
         if status.as_u16() == 404 {
             return Err("이 계정은 아티팩트 목록 API가 제공되지 않아요 (사용량만 표시)".to_string());
@@ -245,11 +254,12 @@ impl Client {
         Err("아티팩트 목록을 파싱하지 못했습니다".to_string())
     }
 
-    /// Best-effort refresh of an expired access token (in-memory only; never persisted).
-    pub async fn refresh_token(&self, refresh_token: &str) -> Option<String> {
+    /// Exchange a refresh token for a new access token. The caller must persist
+    /// the result: the refresh token passed in is consumed by a successful call.
+    pub async fn refresh_token(&self, refresh_token: &str) -> Option<RefreshedToken> {
         for url in [
+            crate::oauth::TOKEN_URL,
             "https://console.anthropic.com/v1/oauth/token",
-            "https://api.anthropic.com/v1/oauth/token",
         ] {
             let body = json!({
                 "grant_type": "refresh_token",
@@ -266,7 +276,14 @@ impl Client {
                 continue;
             };
             if let Some(tok) = v.get("access_token").and_then(|x| x.as_str()) {
-                return Some(tok.to_string());
+                return Some(RefreshedToken {
+                    access_token: tok.to_string(),
+                    refresh_token: v
+                        .get("refresh_token")
+                        .and_then(|x| x.as_str())
+                        .map(String::from),
+                    expires_in: v.get("expires_in").and_then(|x| x.as_u64()).unwrap_or(28800),
+                });
             }
         }
         None

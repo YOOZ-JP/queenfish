@@ -9,7 +9,7 @@ use tauri::{AppHandle, Emitter};
 use tauri_plugin_opener::OpenerExt;
 
 const AUTHORIZE_URL: &str = "https://claude.ai/oauth/authorize";
-const TOKEN_URL: &str = "https://platform.claude.com/v1/oauth/token";
+pub const TOKEN_URL: &str = "https://platform.claude.com/v1/oauth/token";
 const SCOPES: &str =
     "user:inference user:profile user:sessions:claude_code user:plugins user:mcp_servers user:file_upload";
 
@@ -169,26 +169,30 @@ async fn exchange_and_store(
         .await
         .ok_or("프로필 조회 실패 (토큰은 수신됨)")?;
 
-    let expires_at = crate::now_ms() + expires_in * 1000;
-    let scopes: Vec<&str> = v
-        .get("scope")
-        .and_then(|s| s.as_str())
-        .map(|s| s.split(' ').collect())
-        .unwrap_or_default();
+    store_credentials(&email, access, refresh, crate::now_ms() + expires_in * 1000)?;
+    Ok(email)
+}
+
+/// Write a login to Queenfish's own keychain item for `email` (same JSON shape
+/// Claude Code uses, so discovery parses both alike).
+pub fn store_credentials(
+    email: &str,
+    access_token: &str,
+    refresh_token: Option<&str>,
+    expires_at_ms: u64,
+) -> Result<(), String> {
     let blob = serde_json::json!({
         "claudeAiOauth": {
-            "accessToken": access,
-            "refreshToken": refresh,
-            "expiresAt": expires_at,
-            "scopes": scopes,
+            "accessToken": access_token,
+            "refreshToken": refresh_token,
+            "expiresAt": expires_at_ms,
         }
     });
     let service = format!("{KEYCHAIN_PREFIX}{email}");
-    let entry = keyring::Entry::new(&service, &email).map_err(|e| e.to_string())?;
+    let entry = keyring::Entry::new(&service, email).map_err(|e| e.to_string())?;
     entry
         .set_password(&blob.to_string())
-        .map_err(|e| format!("Keychain 저장 실패: {e}"))?;
-    Ok(email)
+        .map_err(|e| format!("Keychain 저장 실패: {e}"))
 }
 
 /// Delete a Queenfish-managed credential. Never touches Claude Code's items.
